@@ -67,8 +67,33 @@ jobs:
           if [ ! -f "$HOME/.android/debug.keystore" ]; then
             keytool -genkeypair -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
+      - name: Validate Android export configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "HOME=$HOME"
+          echo "JAVA_HOME=${JAVA_HOME:-unset}"
+          echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
+          test -s "$HOME/.local/share/godot/export_templates/4.4.1.stable/android_debug.apk"
+          test -s "$HOME/.android/debug.keystore"
+          test -x "$JAVA_HOME/bin/java"
+          test -d "$ANDROID_HOME/platforms"
+          ls -la "$ANDROID_HOME/platforms"
+          ls -la "$ANDROID_HOME/build-tools"
+          cat "$HOME/.config/godot/editor_settings-4.4.tres"
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          import os
+          p = Path('export_presets.cfg')
+          s = p.read_text()
+          s = s.replace('keystore/debug=""', 'keystore/debug="' + os.environ['HOME'] + '/.android/debug.keystore"')
+          p.write_text(s)
+          PYCODE
       - name: Export APK for ARM64
-        run: bash -o pipefail -c 'godot --headless --path . --export-debug Android build/ht2-android-debug.apk 2>&1 | tee /tmp/godot-export.log'
+        shell: bash
+        run: |
+          set -o pipefail
+          godot --verbose --headless --path . --export-debug Android build/ht2-android-debug.apk 2>&1 | tee /tmp/godot-export.log
       - name: Verify APK
         run: |
           test -s build/ht2-android-debug.apk
