@@ -55,6 +55,25 @@ jobs:
           echo "JAVA_HOME=$JAVA_SDK" >> "$GITHUB_ENV"
           echo "ANDROID_HOME=$ANDROID_SDK" >> "$GITHUB_ENV"
           ls -lh "$HOME/.local/share/godot/export_templates/$GODOT_VERSION/android_debug.apk"
+      - name: Install matching Android SDK components
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="$ANDROID_HOME"
+          echo "Android SDK: $SDK"
+          echo "Available SDK tools:"
+          find "$SDK" -maxdepth 5 -name sdkmanager -type f -print || true
+          SDKMANAGER="$(find "$SDK" /opt -maxdepth 6 -name sdkmanager -type f -print -quit 2>/dev/null || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "ERROR: sdkmanager is missing; cannot install matching Android SDK components" >&2
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --sdk_root="$SDK" --licenses >/dev/null || true
+          "$SDKMANAGER" --sdk_root="$SDK" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+          test -f "$SDK/platforms/android-35/android.jar"
+          test -x "$SDK/build-tools/35.0.0/aapt2"
+          echo "Installed Android SDK platforms and build tools:"
+          ls -1 "$SDK/platforms" "$SDK/build-tools"
       - name: Import and compile project
         run: bash -o pipefail -c 'godot --headless --path . --editor --import --quit 2>&1 | tee /tmp/godot-import.log'
       - name: Run gameplay smoke test
