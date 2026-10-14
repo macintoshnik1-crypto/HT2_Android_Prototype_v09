@@ -1,0 +1,42 @@
+name: Android debug APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.4.1
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check source structure
+        run: python3 tools/preflight.py && python3 tools/check_v08.py
+      - name: Import and compile project
+        run: bash -o pipefail -c 'godot --headless --path . --editor --import --quit 2>&1 | tee /tmp/godot-import.log'
+      - name: Run gameplay smoke test
+        run: bash -o pipefail -c 'godot --headless --path . --script res://tests/smoke_test.gd 2>&1 | tee /tmp/godot-smoke.log'
+      - name: Prepare debug signing key
+        run: |
+          mkdir -p "$HOME/.android" build
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
+      - name: Export APK for ARM64
+        env:
+          GODOT_ANDROID_KEYSTORE_DEBUG_PATH: /root/.android/debug.keystore
+          GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
+          GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
+        run: bash -o pipefail -c 'godot --headless --path . --export-debug Android build/ht2-android-debug.apk 2>&1 | tee /tmp/godot-export.log'
+      - name: Verify APK
+        run: |
+          test -s build/ht2-android-debug.apk
+          unzip -t build/ht2-android-debug.apk | tail -1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ht2-android-debug-apk
+          path: build/ht2-android-debug.apk
+          if-no-files-found: error

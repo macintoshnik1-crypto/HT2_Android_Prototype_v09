@@ -1,0 +1,7 @@
+{
+  "version": "0.6",
+  "validation": "static preflight only",
+  "godot_run": false,
+  "apk_built": false,
+  "device_tested": false
+}
