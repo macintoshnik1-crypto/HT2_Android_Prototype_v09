@@ -20,21 +20,54 @@ jobs:
           python3 --version
       - name: Check source structure
         run: python3 tools/preflight.py && python3 tools/check_v08.py
+      - name: Configure Godot Android export environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          GODOT_VERSION=4.4.1.stable
+          mkdir -p "$HOME/.local/share/godot/export_templates/$GODOT_VERSION" "$HOME/.config/godot" "$HOME/.android" build
+          SOURCE_TEMPLATES="/root/.local/share/godot/export_templates/$GODOT_VERSION"
+          if [ ! -f "$HOME/.local/share/godot/export_templates/$GODOT_VERSION/android_debug.apk" ]; then
+            if [ ! -f "$SOURCE_TEMPLATES/android_debug.apk" ]; then
+              echo "Missing Android export templates in image: $SOURCE_TEMPLATES" >&2
+              exit 1
+            fi
+            cp -a "$SOURCE_TEMPLATES/." "$HOME/.local/share/godot/export_templates/$GODOT_VERSION/"
+          fi
+          JAVA_SDK=/usr/lib/jvm/java-17-openjdk-amd64
+          ANDROID_SDK=/usr/lib/android-sdk
+          test -x "$JAVA_SDK/bin/java"
+          test -x "$ANDROID_SDK/platform-tools/adb"
+          SETTINGS="$HOME/.config/godot/editor_settings-4.4.tres"
+          cat > "$SETTINGS" <<SETTINGS_EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/java_sdk_path = "$JAVA_SDK"
+          export/android/android_sdk_path = "$ANDROID_SDK"
+          export/android/debug_keystore = "$HOME/.android/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          SETTINGS_EOF
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey" >> "$GITHUB_ENV"
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android" >> "$GITHUB_ENV"
+          echo "JAVA_HOME=$JAVA_SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$ANDROID_SDK" >> "$GITHUB_ENV"
+          ls -lh "$HOME/.local/share/godot/export_templates/$GODOT_VERSION/android_debug.apk"
       - name: Import and compile project
         run: bash -o pipefail -c 'godot --headless --path . --editor --import --quit 2>&1 | tee /tmp/godot-import.log'
       - name: Run gameplay smoke test
         run: bash -o pipefail -c 'godot --headless --path . --script res://tests/smoke_test.gd 2>&1 | tee /tmp/godot-smoke.log'
       - name: Prepare debug signing key
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p "$HOME/.android" build
           if [ ! -f "$HOME/.android/debug.keystore" ]; then
             keytool -genkeypair -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
       - name: Export APK for ARM64
-        env:
-          GODOT_ANDROID_KEYSTORE_DEBUG_PATH: /root/.android/debug.keystore
-          GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
-          GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
         run: bash -o pipefail -c 'godot --headless --path . --export-debug Android build/ht2-android-debug.apk 2>&1 | tee /tmp/godot-export.log'
       - name: Verify APK
         run: |
