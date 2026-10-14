@@ -13,6 +13,10 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - name: Check source structure
         run: python3 tools/preflight.py && python3 tools/check_v08.py
       - name: Import and compile project
